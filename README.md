@@ -43,4 +43,4 @@ To output MARC-XML, this object is converted to a dom-object:
   (subfield ((code . "c")) "statement of responsibility"))
 ```
 
-which can be printed as XML with `(dom-print XML t t)`
+which can be printed as XML with `(dom-print DOM t t)`
