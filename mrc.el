@@ -16,12 +16,22 @@
 ;;; Commentary:
 ;;
 ;;  This package contains functions to convert text in MARC BREAKER format to
-;;  MARC 21-XML.
+;;  MARC21-XML or JSON.
 ;;
 ;;; Code:
 (require 'dom)
 
-(defun mrk2xml-line (arg)
+(defun mrc-insert-ruler (arg)
+  "Insert ruler to indicate character positions in controlfields.
+If ARG, only print ARG character positions (or all if ARG is greater than 39)."
+  (interactive "P")
+  (let ((ruler "0....5....10...15...20...25...30...35..."))
+    (if (and arg (< arg 39))
+        (insert (substring ruler 0 (1+ arg)))
+      (insert ruler))))
+
+
+(defun mrc-line (arg)
   "Convert ARG lines of mark breaker into MARCXML."
   (interactive "p")
   (let ((numlines (or arg 1)))
