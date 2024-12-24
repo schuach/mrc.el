@@ -73,5 +73,8 @@ indicators."
                   subfields)))
     (nreverse subfields)))
 
+(defun mrk2xml-doom-bind-keys ()
+  "Bind default keys for Doom Emacs.")
+
 (provide 'mrk2xml)
 ;;; mrk2xml.el ends here
