@@ -1,4 +1,4 @@
-;;; mrc.el --- edit MARC 21 in several serializations -*- lexical-binding: t; -*-
+;;; mrc.el --- Edit MARC 21 in several serializations -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2024 Stefan Schuh
 ;;
@@ -20,6 +20,7 @@
 ;;
 ;;; Code:
 (require 'dom)
+(require 'json)
 
 (defun mrc-insert-ruler (arg)
   "Insert ruler to indicate character positions in controlfields.
@@ -31,7 +32,7 @@ If ARG, only print ARG character positions (or all if ARG is greater than 39)."
       (insert ruler))))
 
 (defun mrc-read-datafield (mrk)
-  "Create JSON object for a MARC datafield."
+  "Create JSON object form MRK (a MARCBreaker datafield)."
   (let* ((parts (split-string mrk "\\$\\$" t " *"))
          (tag-ind (replace-regexp-in-string "^=" "" (string-replace " " "" (car parts))))
          (tag (substring tag-ind 0 3))
@@ -41,18 +42,12 @@ If ARG, only print ARG character positions (or all if ARG is greater than 39)."
     `((tag . ,tag)
        (ind1 . ,ind1)
        (ind2 . ,ind2)
-       (subfields . ,(mrc-handle-subfields subfields)))))
-
-(defun mrc-handle-subfields (subfield-strings)
-  "Create marc:subfields given a marc-breaker string without tag and
-indicators."
-  (vconcat (mapcar #'mrc-read-subfield subfield-strings)))
+       (subfields . ,(vconcat (mapcar #'mrc-read-subfield subfields))))))
 
 (defun mrc-read-subfield (sf)
   "Create a JSON object for a MARC subfield."
   `((code . ,(substring sf 0 1))
     (value . ,(string-trim-left (substring sf 1)))))
-;; (cons `((code . ,(substring sf 0 1)) (value . ,(string-trim-left (substring sf 1)))))
 
 (defun mrc-read-controlfield (mrk)
   "Create JSON object for a MARC controlfield."
@@ -65,6 +60,19 @@ indicators."
            (insert (json-serialize field))
            (json-pretty-print (point-min) (point-max))
            (buffer-string)))
+
+(defun mrc-insert-json (field pretty)
+  "Insert FIELD at point as JSON.
+If PRETTY is non-nil, pretty print the output."
+  (if pretty
+      (insert (mrc-pretty-print-json field))
+    (insert (json-serialize field))))
+
+(defun mrc-field->dom (field)
+  "Convert FIELD into dom object."
+  (if (alist-get 'subfields field)
+      (mrc-datafield->dom field)
+    (mrc-controlfield->dom field)))
 
 (defun mrc-datafield->dom (datafield)
   "Convert DATAFIELD to dom object."
@@ -81,61 +89,44 @@ indicators."
 
 (defun mrc-controlfield->dom (controlfield)
   "Convert CONTROLFIELD to dom object."
-  `(controlfield
-    ((tag . ,(alist-get 'tag controlfield)))
-    ,(alist-get 'value controlfield)))
+  (let ((tag (alist-get 'tag controlfield))
+        (value (alist-get 'value controlfield)))
+    (if (or  (string= tag "LDR") (string= tag "000"))
+        `(leader nil ,value)
+        `(controlfield
+          ((tag . ,(alist-get 'tag controlfield)))
+          ,(alist-get 'value controlfield)))))
 
-(defun mrc-line (arg)
-  "Convert ARG lines of mark breaker into MARCXML."
-  (interactive "p")
+(defun mrc-convert-line (arg format)
+  "Convert ARG lines of mark breaker into FORMAT.
+FORMAT can be `:xml' for MARC-XML or `:json' for JSON."
   (let ((numlines (or arg 1)))
-    (dotimes (i numlines)
+    (dotimes (_i numlines)
       (let*
           ((mrkline
             (delete-and-extract-region (line-beginning-position)
                                        (line-end-position)))
-           (mrc-el
-            (cond ((or (string-prefix-p "LDR" mrkline)
-                       (string-prefix-p "000" mrkline))
-                   (mrc-create-leader mrkline))
-                  ((string-prefix-p "00" mrkline)
-                   (mrc-create-controlfield mrkline))
-                  (t (mrc-create-datafield mrkline)))))
-        (dom-print mrc-el t t) (forward-line)))))
+           (mrc-object
+            (if (string-match-p (regexp-quote "$$") mrkline)
+                (mrc-read-datafield mrkline)
+              (mrc-read-controlfield mrkline))))
+        (cond ((eq format :xml)
+               (dom-print (mrc-field->dom mrc-object) t t))
+              ((eq format :json) (mrc-insert-json mrc-object t))
+              (t (progn
+                   (message "Unknown format.")
+                   (insert mrkline))))
+        (forward-line)))))
 
-(defun mrc-create-leader (mrk)
-  "Create a dom-element for a marc:leader."
-  `(leader nil ,(substring mrk 4)))
+(defun mrc-mrk->xml (arg)
+  "Convert ARG lines of MARCBreaker into MARC-XML."
+  (interactive "p")
+  (mrc-line arg :xml))
 
-(defun mrc-create-controlfield (mrk)
-  "Create a dom-element for a marc:controlfield."
-  (let ((tag (substring mrk 0 3))
-        (value (substring mrk 4)))
-    `(controlfield ((tag . ,tag)) ,value)))
-
-(defun mrc-create-datafield (mrk)
-  "Create dom-element for a marc:datafield given a line of mark-breaker."
-  (let* ((parts (split-string mrk "\\$\\$" t " *"))
-         (tag-ind (string-replace " " "" (car parts)))
-         (tag (substring tag-ind 0 3))
-         (ind1 (replace-regexp-in-string "[#\\]" " " (substring tag-ind 3 4)))
-         (ind2 (replace-regexp-in-string "[#\\]" " " (substring tag-ind 4 5)))
-         (subfields (cdr parts)))
-    `(datafield ((tag . ,tag)
-                 (ind1 . ,ind1)
-                 (ind2 . ,ind2))
-      ,@(mrc-handle-subfields subfields))))
-
-(defun mrc-handle-subfields (subfield-strings)
-  "Create marc:subfields given a marc-breaker string without tag and
-indicators."
-  (let ((subfields))
-    (dolist (sf subfield-strings subfields)
-      (setq subfields
-            (cons `(subfield ((code . ,(substring sf 0 1)))
-                    ,(string-trim-left (substring sf 1)))
-                  subfields)))
-    (nreverse subfields)))
+(defun mrc-mrk->json (arg)
+  "Convert ARG lines of MARCBreaker into JSON."
+  (interactive "p")
+  (mrc-line arg :json))
 
 (defun mrc-doom-bind-keys ()
   "Bind default keys for Doom Emacs.")
