@@ -4,8 +4,12 @@ This adds convenience functions for editing MARC21 data. Most of it is concerned
 
 ## Commands
 - `mrc-insert-ruler`: Insert a ruler indicating character positions. For naked-eye-navigation in fixed fields.
-- `mrc-mrk->json`: convert MARCBreaker to JSON-Object.
-- `mrc-mrk->xml`: convert MARCBreaker to MARC-XML
+- `mrc-mrk->json-line`: convert a line of MARCBreaker to a JSON-Object. With a numeric prefix arg, convert arg lines.
+- `mrc-mrk->json-region`: convert all lines in a region of MARCBreaker to JSON-Objects.
+- `mrc-mrk->json-subfields-only`: convert all subfields in a line of MARCBreaker to JSON-Objects. Handy to add subfields to an existing field.
+- `mrc-mrk->xml-line`: convert a line of MARCBreaker to MARC-XML. With a numeric prefix arg, convert arg lines.
+- `mrc-mrk->xml-region`: convert all lines in a region of MARCBreaker to MARC-XML.
+- `mrc-mrk->xml-subfields-only`: convert all subfields in a line of MARCBreaker to MARC-XML. Handy to add subfields to an existing field.
 
 ## Keybindings
 It's up to the user to bind keys to the commands. As I am using Doom Emacs, `mrc-doom-bind-keys` binds keys to the local leader maps of `nxml-mode`, `typescript-mode`, `rsjx-mode` and `js-json-mode`. If you are using Doom Emacs too, you can call this function in your config.
@@ -44,3 +48,10 @@ To output MARC-XML, this object is converted to a dom-object:
 ```
 
 which can be printed as XML with `(dom-print DOM t t)`
+
+## Possible features to add
+Maybe some day I will need (and implement) more features, like ...
+
+- convert whole records or collections
+- `json->mrk`
+= `xml->mrk`
