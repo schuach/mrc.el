@@ -22,6 +22,7 @@
 (require 'dom)
 (require 'json)
 
+;;; convenience functions
 (defun mrc-insert-ruler (arg)
   "Insert ruler to indicate character positions in controlfields.
 If ARG, only print ARG character positions (or all if ARG is greater than 39)."
@@ -30,6 +31,110 @@ If ARG, only print ARG character positions (or all if ARG is greater than 39)."
     (if (and arg (< arg 39))
         (insert (substring ruler 0 (1+ arg)))
       (insert ruler))))
+
+
+;;; Commands to convert buffer contents
+(defun mrc-mrk->xml-line (arg)
+  "Convert ARG lines of MARCBreaker into MARC-XML."
+  (interactive "p")
+  (mrc-convert-line arg 'xml))
+
+(defun mrc-mrk->json-line (arg)
+  "Convert ARG lines of MARCBreaker into JSON."
+  (interactive "p")
+  (mrc-convert-line arg 'json))
+
+(defun mrc-mrk->json-region (start end)
+  "Convert all lines in region to JSON."
+  (interactive "r")
+  (mrc-convert-region start end 'json))
+
+(defun mrc-mrk->xml-region (start end)
+  "Convert all lines in region to MARC-XML."
+  (interactive "r")
+  (mrc-convert-region start end 'xml))
+
+(defun mrc-mrk->xml-subfields-only ()
+  "Convert a line only containing subfields to MARC-XML."
+  (interactive)
+  (mrc-convert-subfields-only 'xml))
+
+(defun mrc-mrk->json-subfields-only ()
+  "Convert a line only containing subfields to JSON."
+  (interactive)
+  (mrc-convert-subfields-only 'json))
+
+(defun mrc-convert-region (start end format)
+  "Convert all lines in REGION to FORMAT."
+  (let ((numlines (count-lines (point-min) (point-max))))
+    (goto-char start)
+    (mrc-convert-line numlines format)))
+
+(defun mrc-convert-line (arg format)
+  "Convert ARG lines of mark breaker into FORMAT.
+FORMAT can be `xml' for MARC-XML or `json' for JSON."
+  (let ((numlines (or arg 1)))
+    (dotimes (_i numlines)
+      (let*
+          ((mrkline
+            (substring-no-properties    ; remove text properties from string
+             (delete-and-extract-region (line-beginning-position)
+                                        (line-end-position))))
+           (mrc-object (mrc-read-field mrkline)))
+        (cond ((eq format 'xml)
+               (dom-print (mrc-field->dom mrc-object) t t))
+              ((eq format 'json) (mrc-insert-json mrc-object t))
+              (t (progn
+                   (message "Unknown format.")
+                   (insert mrkline))))
+        (forward-line)))))
+
+(defun mrc-convert-subfields-only (format)
+  "Convert only the subfields in a line into FORMAT."
+  (let* ((mrkline
+          (substring-no-properties       ; remove text properties from string
+           (delete-and-extract-region (line-beginning-position)
+                                      (line-end-position))))
+         (subfield-strings (split-string (string-trim-left mrkline "[^$]*") "\\$\\$" t " *"))
+         (subfields (mapcar #'mrc-read-subfield subfield-strings)))
+    (mapc
+     #'(lambda (sf)
+         (cond ((eq format 'json)
+                (mrc-insert-json sf t))
+               ((eq format 'xml)
+                (dom-print (mrc-subfield->dom sf)))
+               (t (progn
+                    (message "Unknown format.")
+                    (insert mrkline))))
+         (newline))
+     subfields)))
+
+;;; inserting JSON
+(defun mrc-insert-json (field pretty)
+  "Insert FIELD at point as JSON.
+If PRETTY is non-nil, pretty print the output."
+  (cond
+   ((or (string= "000" (alist-get 'tag field))
+        (string= "LDR" (alist-get 'tag field)))
+    (insert (concat "\"leader\": \"" (alist-get 'value field) "\",")))
+   (pretty
+    (insert (concat (mrc-pretty-print-json field) ",")))
+   (t (insert (concat (json-serialize field) ",")))))
+
+(defun mrc-pretty-print-json (field)
+  "Serialize and pretty print a FIELD."
+  (with-temp-buffer
+    (insert (json-serialize field))
+    (json-pretty-print (point-min) (point-max))
+    (buffer-string)))
+
+;;; reading strings to field objects
+(defun mrc-read-field (mrk)
+  "Create JSON object from MRK."
+  (if
+      (string-match-p (regexp-quote "$$") mrk)
+      (mrc-read-datafield mrk)
+    (mrc-read-controlfield mrk)))
 
 (defun mrc-read-datafield (mrk)
   "Create JSON object form MRK (a MARCBreaker datafield)."
@@ -40,9 +145,9 @@ If ARG, only print ARG character positions (or all if ARG is greater than 39)."
          (ind2 (replace-regexp-in-string "[#\\]" " " (substring tag-ind 4 5)))
          (subfields (cdr parts)))
     `((tag . ,tag)
-       (ind1 . ,ind1)
-       (ind2 . ,ind2)
-       (subfields . ,(vconcat (mapcar #'mrc-read-subfield subfields))))))
+      (ind1 . ,ind1)
+      (ind2 . ,ind2)
+      (subfields . ,(vconcat (mapcar #'mrc-read-subfield subfields))))))
 
 (defun mrc-read-subfield (sf)
   "Create a JSON object for a MARC subfield."
@@ -54,20 +159,8 @@ If ARG, only print ARG character positions (or all if ARG is greater than 39)."
   `((tag . ,(substring mrk 0 3))
     (value . ,(string-trim-left (substring mrk 3)))))
 
-(defun mrc-pretty-print-json (field)
-  "Serialize and pretty print a FIELD."
-  (with-temp-buffer
-           (insert (json-serialize field))
-           (json-pretty-print (point-min) (point-max))
-           (buffer-string)))
 
-(defun mrc-insert-json (field pretty)
-  "Insert FIELD at point as JSON.
-If PRETTY is non-nil, pretty print the output."
-  (if pretty
-      (insert (mrc-pretty-print-json field))
-    (insert (json-serialize field))))
-
+;;; converting field objects to dom objects
 (defun mrc-field->dom (field)
   "Convert FIELD into dom object."
   (if (alist-get 'subfields field)
@@ -93,43 +186,33 @@ If PRETTY is non-nil, pretty print the output."
         (value (alist-get 'value controlfield)))
     (if (or  (string= tag "LDR") (string= tag "000"))
         `(leader nil ,value)
-        `(controlfield
-          ((tag . ,(alist-get 'tag controlfield)))
-          ,(alist-get 'value controlfield)))))
+      `(controlfield
+        ((tag . ,(alist-get 'tag controlfield)))
+        ,(alist-get 'value controlfield)))))
 
-(defun mrc-convert-line (arg format)
-  "Convert ARG lines of mark breaker into FORMAT.
-FORMAT can be `:xml' for MARC-XML or `:json' for JSON."
-  (let ((numlines (or arg 1)))
-    (dotimes (_i numlines)
-      (let*
-          ((mrkline
-            (delete-and-extract-region (line-beginning-position)
-                                       (line-end-position)))
-           (mrc-object
-            (if (string-match-p (regexp-quote "$$") mrkline)
-                (mrc-read-datafield mrkline)
-              (mrc-read-controlfield mrkline))))
-        (cond ((eq format :xml)
-               (dom-print (mrc-field->dom mrc-object) t t))
-              ((eq format :json) (mrc-insert-json mrc-object t))
-              (t (progn
-                   (message "Unknown format.")
-                   (insert mrkline))))
-        (forward-line)))))
-
-(defun mrc-mrk->xml (arg)
-  "Convert ARG lines of MARCBreaker into MARC-XML."
-  (interactive "p")
-  (mrc-line arg :xml))
-
-(defun mrc-mrk->json (arg)
-  "Convert ARG lines of MARCBreaker into JSON."
-  (interactive "p")
-  (mrc-line arg :json))
 
 (defun mrc-doom-bind-keys ()
-  "Bind default keys for Doom Emacs.")
+  "Bind default keys for Doom Emacs."
+  (map! :after nxml-mode
+        :map   nxml-mode-map
+        :localleader
+        (:prefix ("m" . "mrc-text-to-xml")
+                 "m" #'mrc-mrk->xml-line
+                 "r" #'mrc-mrk->xml-region
+                 "s" #'mrc-mrk->xml-subfields-only))
+  (map! :map   js-mode-map
+        :localleader
+        (:prefix ("m" . "mrc-text-to-json")
+                 "m" #'mrc-mrk->json-line
+                 "r" #'mrc-mrk->json-region
+                 "s" #'mrc-mrk->json-subfields-only))
+  (map! :after typescript-mode
+        :map typescript-mode-map
+        :localleader
+        (:prefix ("m" . "mrc-text-to-json")
+                 "m" #'mrc-mrk->json-line
+                 "r" #'mrc-mrk->json-region
+                 "s" #'mrc-mrk->json-subfields-only)))
 
 (provide 'mrc)
 ;;; mrc.el ends here
