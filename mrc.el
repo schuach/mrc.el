@@ -32,7 +32,6 @@ If ARG, only print ARG character positions (or all if ARG is greater than 39)."
         (insert (substring ruler 0 (1+ arg)))
       (insert ruler))))
 
-
 ;;; Commands to convert buffer contents
 (defun mrc-mrk->xml-line (arg)
   "Convert ARG lines of MARCBreaker into MARC-XML."
@@ -131,10 +130,11 @@ If PRETTY is non-nil, pretty print the output."
 ;;; reading strings to field objects
 (defun mrc-read-field (mrk)
   "Create JSON object from MRK."
-  (if
-      (string-match-p (regexp-quote "$$") mrk)
-      (mrc-read-datafield mrk)
-    (mrc-read-controlfield mrk)))
+  (let ((mrk (string-trim-left mrk)))
+    (if
+        (string-match-p (regexp-quote "$$") mrk)
+        (mrc-read-datafield mrk)
+      (mrc-read-controlfield mrk))))
 
 (defun mrc-read-datafield (mrk)
   "Create JSON object form MRK (a MARCBreaker datafield)."
