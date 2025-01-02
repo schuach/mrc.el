@@ -150,14 +150,14 @@ If PRETTY is non-nil, pretty print the output."
       (subfields . ,(vconcat (mapcar #'mrc-read-subfield subfields))))))
 
 (defun mrc-read-subfield (sf)
-  "Create a JSON object for a MARC subfield."
+  "Create a JSON object for MARC subfield SF."
   `((code . ,(substring sf 0 1))
     (value . ,(string-trim-left (substring sf 1)))))
 
-(defun mrc-read-controlfield (mrk)
-  "Create JSON object for a MARC controlfield."
-  `((tag . ,(substring mrk 0 3))
-    (value . ,(string-trim-left (substring mrk 3)))))
+(defun mrc-read-controlfield (cf)
+  "Create JSON object for MARC controlfield CF."
+  `((tag . ,(substring cf 0 3))
+    (value . ,(string-trim-left (substring cf 3)))))
 
 
 ;;; converting field objects to dom objects
