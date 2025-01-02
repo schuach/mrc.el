@@ -156,8 +156,11 @@ If PRETTY is non-nil, pretty print the output."
 
 (defun mrc-read-controlfield (cf)
   "Create JSON object for MARC controlfield CF."
-  `((tag . ,(substring cf 0 3))
-    (value . ,(string-trim-left (substring cf 3)))))
+  (let* ((trimmed-cf (replace-regexp-in-string "^=" "" cf))
+         (tag (substring trimmed-cf 0 3))
+         (value (replace-regexp-in-string  "[#\\]" " " (string-trim-left (substring trimmed-cf 3)))))
+    `((tag . ,tag)
+      (value . ,value))))
 
 
 ;;; converting field objects to dom objects
