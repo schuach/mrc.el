@@ -8,6 +8,21 @@
               '((code . "a")
                 (value . "SFa")))))
 
+(ert-deftest read-datafield ()
+  ;; MARCBreaker format
+  (should (equal (mrc-read-datafield "=016\\\\$a3155702-8 $2DE-600")
+                 '((tag . "016")
+                   (ind1 . " ")
+                   (ind2 . " ")
+                   (subfields . [((code . "a") (value . "3155702-8"))
+                                 ((code . "2") (value . "DE-600"))]))))
+  (should (equal (mrc-read-datafield "016##$$a3155702-8$$2DE-600")
+                 '((tag . "016")
+                   (ind1 . " ")
+                   (ind2 . " ")
+                   (subfields . [((code . "a") (value . "3155702-8"))
+                                 ((code . "2") (value . "DE-600"))])))))
+
 (ert-deftest read-controlfield ()
   ;; MARCBreaker format
   (should (equal (mrc-read-controlfield "=000 00000cy\\\\a2200000zn\\4500")

@@ -138,7 +138,7 @@ If PRETTY is non-nil, pretty print the output."
 
 (defun mrc-read-datafield (mrk)
   "Create JSON object form MRK (a MARCBreaker datafield)."
-  (let* ((parts (split-string mrk "\\$\\$" t " *"))
+  (let* ((parts (split-string mrk "\\$\\$?" t " *"))
          (tag-ind (replace-regexp-in-string "^=" "" (string-replace " " "" (car parts))))
          (tag (substring tag-ind 0 3))
          (ind1 (replace-regexp-in-string "[#\\]" " " (substring tag-ind 3 4)))
