@@ -22,6 +22,9 @@
 (require 'dom)
 (require 'json)
 
+;; variables
+(defvar mrc-ns-prefix "" "Namespace prefix to prepend in XML-serialization.")
+
 ;;; convenience functions
 (defun mrc-insert-ruler (arg)
   "Insert ruler to indicate character positions in controlfields.
@@ -105,8 +108,9 @@ FORMAT can be `xml' for MARC-XML or `json' for JSON."
                (t (progn
                     (message "Unknown format.")
                     (insert mrkline))))
-         (newline))
-     subfields)))
+         (reindent-then-newline-and-indent))
+     subfields)
+    (delete-line)))
 
 ;;; inserting JSON
 (defun mrc-insert-json (field pretty)
@@ -131,8 +135,7 @@ If PRETTY is non-nil, pretty print the output."
 (defun mrc-read-field (mrk)
   "Create JSON object from MRK."
   (let ((mrk (string-trim-left mrk)))
-    (if
-        (string-match-p (regexp-quote "$$") mrk)
+    (if (string-match-p "\$\$?" mrk)
         (mrc-read-datafield mrk)
       (mrc-read-controlfield mrk))))
 
@@ -172,14 +175,16 @@ If PRETTY is non-nil, pretty print the output."
 
 (defun mrc-datafield->dom (datafield)
   "Convert DATAFIELD to dom object."
-  `(datafield ((tag . ,(alist-get 'tag datafield))
-               (ind1 . ,(alist-get 'ind1 datafield))
-               (ind2 . ,(alist-get 'ind2 datafield)))
+  `(,(make-symbol (concat mrc-ns-prefix "datafield"))
+    ((tag . ,(alist-get 'tag datafield))
+     (ind1 . ,(alist-get 'ind1 datafield))
+     (ind2 . ,(alist-get 'ind2 datafield)))
+
     ,@(mapcar #'mrc-subfield->dom (alist-get 'subfields datafield))))
 
 (defun mrc-subfield->dom (subfield)
   "Convert SUBFIELD to dom object."
-  `(subfield
+  `(,(make-symbol (concat mrc-ns-prefix "subfield"))
     ((code . , (alist-get 'code subfield)))
     ,(alist-get 'value subfield)))
 
@@ -188,8 +193,8 @@ If PRETTY is non-nil, pretty print the output."
   (let ((tag (alist-get 'tag controlfield))
         (value (alist-get 'value controlfield)))
     (if (or  (string= tag "LDR") (string= tag "000"))
-        `(leader nil ,value)
-      `(controlfield
+        `(,(make-symbol (concat mrc-ns-prefix "leader")) nil ,value)
+      `(,(make-symbol (concat mrc-ns-prefix "controlfield"))
         ((tag . ,(alist-get 'tag controlfield)))
         ,(alist-get 'value controlfield)))))
 
